@@ -55,6 +55,28 @@ class LoungeLight extends CompositeDevice
 
     return LoungeLight.singleLightTemplate
 
+generateEasing = (startColor, endColor, devices) ->
+  start = []
+  for i in devices
+    i.setValue 'red', startColor.red
+    i.setValue 'blue', startColor.blue
+    i.setValue 'green', startColor.green
+    start.push i.getDmxValues()...
+
+  end = []
+  for i in devices
+    i.setValue 'red', endColor.red
+    i.setValue 'blue', endColor.blue
+    i.setValue 'green', endColor.green
+    end.push i.getDmxValues()...
+
+  new Dmx_Msgs.DmxEasing {
+    start
+    end
+    durationMs: 5000
+    curve: Dmx_Msgs.DmxEasing.EASING_CURVES.Linear
+  }
+
 init = () ->
 
   window.dmxClient = new Dmx.CommandClient(ros)
@@ -105,56 +127,77 @@ $ ->
       else
         old
 
-      startColor =
-        red: 128
-        green: 0
-        blue: 128
+      #Black to Red
+      #Red to Green
+      #Green to Blue
+      #Blue to White
 
-      ui =
+      sets = [
+        {
+          start:
+            red: 0
+            green: 0
+            blue: 0
+          end:
+            red: 255
+            green: 0
+            blue: 0
+        },
+        {
+          start:
+            red: 255
+            green: 0
+            blue: 0
+          end:
+            red: 0
+            green: 255
+            blue: 0
+        },
+        {
+          start:
+            red: 0
+            green: 255
+            blue: 0
+          end:
+            red: 0
+            green: 0
+            blue: 255
+        },
+        {
+          start:
+            red: 0
+            green: 0
+            blue: 255
+          end:
+            red: 255
+            green: 255
+            blue: 255
+        }
+      ]
+
+      startColor =
         red: 0
-        green: 128
+        green: 0
         blue: 0
 
-      console.log "Start Color: #{JSON.stringify startColor}"
-      console.log "End Color: #{JSON.stringify ui}"
-
-      window.moving.setValue 'red', startColor.red
-      window.moving.setValue 'blue', startColor.blue
-      window.moving.setValue 'green', startColor.green
-
-      window.loungeLight.setValue 'red', startColor.red
-      window.loungeLight.setValue 'blue', startColor.blue
-      window.loungeLight.setValue 'green', startColor.green
-      start = window.loungeLight.getDmxValues()
-      start.push(window.moving.getDmxValues()...)
-
-      window.moving.setValue 'red', ui.red
-      window.moving.setValue 'blue', ui.blue
-      window.moving.setValue 'green', ui.green
-
-      window.loungeLight.setValue 'red', ui.red
-      window.loungeLight.setValue 'blue', ui.blue
-      window.loungeLight.setValue 'green', ui.green
-      end = window.loungeLight.getDmxValues()
-      end.push(window.moving.getDmxValues()...)
-
-      easing = new Dmx_Msgs.DmxEasing {
-        start
-        end
-        durationMs: 2000
-        curve: Dmx_Msgs.DmxEasing.EASING_CURVES.Linear
-      }
+      ui =
+        red: 255
+        green: 0
+        blue: 0
 
       command = new Dmx_Msgs.DmxCommand {
-        name: 'change_color'
         action: Dmx_Msgs.DmxCommand.ACTIONS.Display
         loop: false
       }
 
-      frame = new Dmx_Msgs.DmxFrame {durationMs: 4000}
-      frame.easings.push easing
-      frame.values.push end...
-      command.layers.push(frame)
+      delayMs = 0
+
+      for i in sets
+        console.log "Set: #{JSON.stringify i}"
+        frame = new Dmx_Msgs.DmxFrame {durationMs: 5000, delayMs}
+        delayMs += 5000
+        frame.easings.push generateEasing(i.start,i.end, [window.moving, window.loungeLight])
+        command.layers.push(frame)
 
       window.dmxClient.command = command
       window.dmxClient.send()

@@ -15,6 +15,48 @@ class CompositeDevice extends Dmx.Device
     for i in @devices
       i.setValue name, value
 
+class Pixels extends CompositeDevice
+  constructor: (options) ->
+    super(Pixels.generateDevices(options))
+
+  @generateDevices: ({prefix, offset, universe, num}) ->
+    devices = []
+    for i in [0..num]
+      device = new Dmx.Device
+        name: "#{prefix}-#{i}"
+        address: "#{universe}.#{offset + (i*3)}"
+      device.template = Pixels.getSingleLightTemplate()
+      devices.push device
+    devices
+
+  @getSingleLightTemplate: ->
+    if not Pixels.singleLightTemplate?
+      Pixels.singleLightTemplate = new Dmx.DeviceTemplate {name: 'single-pixel'}
+      redField = new Dmx.Field
+        name: 'red'
+        offset: 0
+        length: 1
+
+      blueField = new Dmx.Field
+        name: 'blue'
+        offset: 1
+        length: 1
+
+      greenField = new Dmx.Field
+        name: 'green'
+        offset: 2
+        length: 1
+
+      Pixels.singleLightTemplate.fields = {
+        red: redField
+        green: greenField
+        blue: blueField
+      }
+
+    return Pixels.singleLightTemplate
+
+
+
 class LoungeLight extends CompositeDevice
   constructor: (options) ->
     super(LoungeLight.generateDevices(options))
@@ -55,7 +97,7 @@ class LoungeLight extends CompositeDevice
 
     return LoungeLight.singleLightTemplate
 
-generateEasing = (startColor, endColor, devices) ->
+generateEasing = (startColor, endColor, devices, durationMs) ->
   start = []
   for i in devices
     i.setValue 'red', startColor.red
@@ -73,7 +115,7 @@ generateEasing = (startColor, endColor, devices) ->
   new Dmx_Msgs.DmxEasing {
     start
     end
-    durationMs: 5000
+    durationMs
     curve: Dmx_Msgs.DmxEasing.EASING_CURVES.Linear
   }
 
@@ -85,6 +127,12 @@ init = () ->
     prefix: "living-room"
     offset: 138
     universe: 1
+
+  window.strand1 = new Pixels
+    prefix: "living-room"
+    offset: 0
+    universe: 1
+    num: 45
 
   window.moving = moving = new Dmx.Device({name:'mover-01', address: "1.496"})
   moving.addField( new Dmx.Field({offset: 0, name: 'mode', length: 1, default: 255}) )
@@ -127,77 +175,14 @@ $ ->
       else
         old
 
-      #Black to Red
-      #Red to Green
-      #Green to Blue
-      #Blue to White
-
-      sets = [
-        {
-          start:
-            red: 0
-            green: 0
-            blue: 0
-          end:
-            red: 255
-            green: 0
-            blue: 0
-        },
-        {
-          start:
-            red: 255
-            green: 0
-            blue: 0
-          end:
-            red: 0
-            green: 255
-            blue: 0
-        },
-        {
-          start:
-            red: 0
-            green: 255
-            blue: 0
-          end:
-            red: 0
-            green: 0
-            blue: 255
-        },
-        {
-          start:
-            red: 0
-            green: 0
-            blue: 255
-          end:
-            red: 255
-            green: 255
-            blue: 255
-        }
-      ]
-
-      startColor =
-        red: 0
-        green: 0
-        blue: 0
-
-      ui =
-        red: 255
-        green: 0
-        blue: 0
-
       command = new Dmx_Msgs.DmxCommand {
         action: Dmx_Msgs.DmxCommand.ACTIONS.Display
         loop: false
       }
 
-      delayMs = 0
-
-      for i in sets
-        console.log "Set: #{JSON.stringify i}"
-        frame = new Dmx_Msgs.DmxFrame {durationMs: 5000, delayMs}
-        delayMs += 5000
-        frame.easings.push generateEasing(i.start,i.end, [window.moving, window.loungeLight])
-        command.layers.push(frame)
+      frame = new Dmx_Msgs.DmxFrame {durationMs: 10000}
+      frame.easings.push generateEasing(startColor,ui, [window.loungeLight, window.moving, window.strand1], 10000)
+      command.layers.push(frame)
 
       window.dmxClient.command = command
       window.dmxClient.send()

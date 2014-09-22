@@ -64,6 +64,18 @@ init = () ->
     offset: 138
     universe: 1
 
+  window.moving = moving = new Dmx.Device({name:'mover-01', address: "1.496"})
+  moving.addField( new Dmx.Field({offset: 0, name: 'mode', length: 1, default: 255}) )
+  moving.addField( new Dmx.Field({offset: 1, name: 'intensity', length: 1, default: 255}) )
+  moving.addField( new Dmx.Field({offset: 2, name: 'pan', length: 2}) )
+  moving.addField( new Dmx.Field({offset: 4, name: 'tilt', length: 2}) )
+  moving.addField( new Dmx.Field({offset: 13, name: 'zoom', length: 2}) )
+  moving.addField( new Dmx.Field({offset: 7, name: 'wheel', length: 1}) )
+  moving.addField( new Dmx.Field({offset: 8, name: 'red', length: 1}) )
+  moving.addField( new Dmx.Field({offset: 9, name: 'green', length: 1}) )
+  moving.addField( new Dmx.Field({offset: 10, name: 'blue', length: 1}) )
+  moving.addField( new Dmx.Field({offset: 11, name: 'white', length: 1}) )
+
 $ ->
 
   window.ros = new ROSLIB.Ros({url : 'ws://192.168.5.118:4000'})
@@ -77,6 +89,8 @@ $ ->
       Dmx.emitter.emit 'ready'
       init()
 
+  old = null
+
   $('#colorpicker').colorPicker {
     format: 'rgb'
     colorChange: (evt, ui) ->
@@ -84,9 +98,52 @@ $ ->
         backgroundColor: ui.color
       })
 
+      startColor = if old == null
+        red: 0
+        green: 0
+        blue: 0
+      else
+        old
+
+      startColor =
+        red: 128
+        green: 0
+        blue: 128
+
+      ui =
+        red: 0
+        green: 128
+        blue: 0
+
+      console.log "Start Color: #{JSON.stringify startColor}"
+      console.log "End Color: #{JSON.stringify ui}"
+
+      window.moving.setValue 'red', startColor.red
+      window.moving.setValue 'blue', startColor.blue
+      window.moving.setValue 'green', startColor.green
+
+      window.loungeLight.setValue 'red', startColor.red
+      window.loungeLight.setValue 'blue', startColor.blue
+      window.loungeLight.setValue 'green', startColor.green
+      start = window.loungeLight.getDmxValues()
+      start.push(window.moving.getDmxValues()...)
+
+      window.moving.setValue 'red', ui.red
+      window.moving.setValue 'blue', ui.blue
+      window.moving.setValue 'green', ui.green
+
       window.loungeLight.setValue 'red', ui.red
       window.loungeLight.setValue 'blue', ui.blue
       window.loungeLight.setValue 'green', ui.green
+      end = window.loungeLight.getDmxValues()
+      end.push(window.moving.getDmxValues()...)
+
+      easing = new Dmx_Msgs.DmxEasing {
+        start
+        end
+        durationMs: 2000
+        curve: Dmx_Msgs.DmxEasing.EASING_CURVES.Linear
+      }
 
       command = new Dmx_Msgs.DmxCommand {
         name: 'change_color'
@@ -94,10 +151,13 @@ $ ->
         loop: false
       }
 
-      frame = new Dmx_Msgs.DmxFrame {durationMs: 5000}
-      frame.values = window.loungeLight.getDmxValues()
+      frame = new Dmx_Msgs.DmxFrame {durationMs: 4000}
+      frame.easings.push easing
+      frame.values.push end...
       command.layers.push(frame)
 
       window.dmxClient.command = command
       window.dmxClient.send()
+
+      old = ui
   }
